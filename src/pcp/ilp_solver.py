@@ -4,31 +4,44 @@ ILP Solver for the Partition Coloring Problem.
 ## ILP Formulation (Compact)
 
 ### Decision Variables:
-- y[v,c] ∈ {0,1}: 1 if vertex v is selected AND assigned color c
-- w[c] ∈ {0,1}: 1 if color c is used by any selected vertex
+- y[v,c] = 1 if vertex v is selected AND assigned color c, otherwise 0
+- w[c] = 1 if color c is used by any selected vertex, otherwise 0
 
 ### Constraints:
 1. Partition selection + color assignment (combined):
-   Exactly one vertex-color pair per partition
-   ∑_{v ∈ P_k} ∑_c y[v,c] = 1, ∀k
+   For each partition P:
+     => Exactly one vertex from P must be selected with exactly one color assigned
+     => Sum of all y[v,c] over all vertices v in P and all colors c equals 1
 
-2. Proper coloring: Adjacent vertices cannot share a color
-   y[u,c] + y[v,c] ≤ 1, ∀(u,v) ∈ E, ∀c
+2. Proper coloring - no conflicts:
+   For each edge (u,v) and for each color c:
+     => Vertices u and v cannot both be selected with color c
+     => y[u,c] + y[v,c] <= 1
 
-3. Color usage: Track which colors are used
-   y[v,c] ≤ w[c], ∀v, ∀c
+3. Color usage tracking:
+   For each vertex v and for each color c:
+     => If vertex v is assigned color c, then color c must be marked as used
+     => y[v,c] <= w[c]
+
+4. Symmetry breaking (optional optimization):
+   For each color c:
+     => If color c+1 is used, then color c must also be used
+     => This forces colors to be used in order: 0, 1, 2, ...
+     => w[c] >= w[c+1]
 
 ### Objective:
-Minimize ∑_c w[c]
+Minimize the total number of colors used
+=> Minimize sum of w[c] over all colors c
 
 ### Upper bound on colors:
-At most k colors are needed (where k = number of partitions),
-since we select exactly k vertices.
+At most k colors are needed (where k = number of partitions)
+=> Since we select exactly k vertices (one per partition), we need at most k colors
 
 ### Note on formulation:
-The x[v] variables (vertex selection) are eliminated since constraint 1
-implicitly ensures exactly one vertex is selected per partition with
-exactly one color assigned.
+This is a compact formulation that combines vertex selection and color assignment.
+Traditional vertex selection variables x[v] are eliminated because constraint 1
+implicitly ensures exactly one vertex per partition is selected by requiring
+exactly one y[v,c] pair to be active in each partition.
 """
 
 from dataclasses import dataclass
