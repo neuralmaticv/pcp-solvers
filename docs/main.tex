@@ -1,0 +1,148 @@
+\documentclass{article}
+
+\usepackage[serbian]{babel}
+\usepackage[a4paper,top=2cm,bottom=2cm,left=3cm,right=3cm]{geometry}
+
+\usepackage{graphicx}
+\usepackage{svg}
+\usepackage{float}
+\graphicspath{ {./images/} }
+
+\usepackage{titlesec}
+\usepackage{amsmath}
+\usepackage{parskip}
+\usepackage[all]{nowidow}
+\usepackage[
+  backend=bibtex,
+  style=authoryear,
+  citestyle=authoryear,
+  maxcitenames=1,
+  uniquename=false,
+  hyperref=true
+]{biblatex}
+
+\addbibresource{references.bib}
+
+\renewcommand{\nameyeardelim}{\addspace}
+
+% Remove the period/dot after year in citations
+% The period comes from Serbian locale's date format - override it
+\DefineBibliographyExtras{serbian}{%
+  \protected\def\mkbibdatelong#1#2#3{%
+    \iffieldundef{#3}{}{\stripzeros{\thefield{#3}}%
+      \iffieldundef{#2}{}{.~}}%
+    \iffieldundef{#2}{}{\mkbibmonth{\thefield{#2}}%
+      \iffieldundef{#1}{}{\addspace}}%
+    \iffieldbibstring{#1}{\bibstring{\thefield{#1}}}{\stripzeros{\thefield{#1}}}}%
+}
+
+% Override labeldateparts format to not add period after year
+\DeclareFieldFormat{labelyear}{#1}
+\DeclareFieldFormat{extrayear}{}
+\DeclareFieldFormat[misc,online,article,book,inbook,incollection]{labelyear}{#1}
+
+% Redefine parencite year format
+\renewbibmacro*{cite:labeldate+extradate}{%
+  \iffieldundef{labelyear}
+    {}
+    {\printtext[bibhyperref]{%
+       \printfield{labelyear}%
+       \printfield{extrayear}}}}
+
+\usepackage{tikz}
+\usetikzlibrary{
+    positioning,
+    arrows.meta,
+    fit,
+    backgrounds
+}
+\setlength{\bibitemsep}{0.6em}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{bookmark}
+\usepackage{csquotes}
+\usepackage[most]{tcolorbox}
+\newtcolorbox{promptbox}{
+  enhanced,
+  colback=gray!5,
+  colframe=black!60,
+  boxrule=0.5pt,
+  arc=3pt,
+  left=6pt,
+  right=6pt,
+  top=6pt,
+  bottom=6pt,
+  breakable,
+  width=0.9\textwidth,
+  center
+}
+
+\makeatletter
+\newcommand{\thetitle}{\@title}
+\makeatother
+
+\newcommand{\university}{Univerzitet u Banjoj Luci}
+\newcommand{\faculty}{Prirodno-matematički fakultet}
+\newcommand{\department}{Studijski program Matematika i informatika}
+
+\newcommand{\subject}{Uvod u vještačku inteligenciju}
+\newcommand{\worktype}{Seminarski rad}
+
+\newcommand{\student}{Vladimir Mijić}
+\newcommand{\mentor}{prof. dr Marko Đukanović}
+
+\title{Analiza i poređenje metaheurističkih i egzaktnih pristupa za rješavanje problema bojenja particija}
+
+\begin{document}
+
+\begin{titlepage}
+  \begin{center}
+    \includegraphics[width=0.25\textwidth]{pmf_logo.png}\\[2ex]
+    
+    {\Large \university}\\[1ex]
+    {\large \faculty}\\[1ex]
+    {\normalsize \department}\\[3ex]
+    
+    {\large \subject}\\[1ex]
+    {\large \textbf{\worktype}}\\[6ex]
+    
+    \vfill
+    {\huge \bfseries \thetitle}
+    \vfill
+    
+    \begin{minipage}[t]{0.48\textwidth}
+      \raggedright
+      \textbf{Student:}\\
+      \student
+    \end{minipage}%%
+    \hfill%%
+    \begin{minipage}[t]{0.48\textwidth}
+      \raggedleft
+      \textbf{Mentor:}\\
+      \mentor
+    \end{minipage}
+    
+    \vfill
+    {\large Banja Luka, \today}
+  \end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Uvod}
+
+Problemi bojenja grafova decenijama se nalaze u samom fokusu istraživanja unutar teorije grafova i kombinatorne optimizacije. U svom standardnom obliku, \textit{problem bojenja čvorova grafa} (engl. \textit{Vertex Coloring Problem} -- VCP, ili \textit{Graph Coloring Problem} -- GCP) sastoji se u dodjeljivanju boje svakom čvoru grafa $G=(V,E)$ uz ograničenje da nijedna dva susjedna čvora ne mogu biti iste boje. Cilj je minimizovati ukupan broj upotrijebljenih boja, što je poznato kao hromatski broj grafa $\chi(G)$.
+
+\textit{Problem bojenja particija} (engl. \textit{Partition Coloring Problem} -- PCP) predstavlja prirodnu, ali značajno složeniju generalizaciju VCP-a. Kod PCP-a, skup čvorova grafa je podijeljen na disjunktne grupe, tzv. particije. Za razliku od klasičnog bojenja, gdje se moraju obojiti svi čvorovi grafa, ovdje je zadatak izabrati tačno jedan čvor iz svake particije. Indukovani podgraf nad skupom izabranih čvorova zatim se boji tako da susjedni čvorovi nemaju istu boju, pri čemu je cilj minimizovati ukupan broj korištenih boja. U literaturi se PCP često naziva i \textit{selektivno bojenje grafa} (engl. \textit{Selective Graph Coloring}), čime se naglašava obavezna faza selekcije prije samog bojenja.
+
+Ovaj problem je prvi put formalno definisan u radu \cite{liSimha2000pcp}, a primarnu motivaciju pronašao je u dizajnu optičkih mreža, konkretno u problemu rutiranja i dodjele talasnih dužina (engl. \textit{Wavelength-Division Multiplexing} -- WDM). U tom kontekstu, svaka particija predstavlja skup alternativnih puteva (ruta) za prenos signala, dok bojenje modeluje dodjelu frekvencija na način koji izbjegava međusobne smetnje. Pored telekomunikacija, PCP je relevantan i za širok spektar problema raspodjele resursa, pravljenja rasporeda (\textit{scheduling}), pozicioniranja antena i drugih srodnih optimizacionih zadataka.
+
+S algoritamskog aspekta, problem bojenja particija predstavlja izazovan zadatak koji pripada klasi NP-teških problema. Kako bi se ova složenost bolje razumjela, prije formalnog definisanja problema neophodno je istaći razloge zbog kojih PCP prevazilazi složenost klasičnog problema bojenja grafova. U okviru PCP-a, izbor čvorova iz particija direktno određuje topologiju konflikata u grafu koji se boji. Neadekvatan izbor može rezultovati gustim podgrafom koji zahtijeva veći broj boja, dok pažljivo odabrana selekcija može značajno redukovati hromatski broj indukovanog podgrafa. Zbog ove neraskidive zavisnosti između selekcije i bojenja, PCP se može posmatrati kao optimizacioni problem sa dva međusobno zavisna nivoa odlučivanja.
+
+Cilj ovog seminarskog rada je da definiše formalni okvir PCP-a, pruži pregled najznačajnijih algoritamskih pristupa u literaturi, te eksperimentalno uporedi efikasnost egzaktnih metoda sa savremenim metaheuristikama.
+
+\clearpage
+\phantomsection
+\printbibliography[heading=bibintoc, title={Literatura}]
+
+\end{document}
