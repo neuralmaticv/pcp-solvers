@@ -141,6 +141,178 @@ S algoritamskog aspekta, problem bojenja particija predstavlja izazovan zadatak 
 
 Cilj ovog seminarskog rada je da definiše formalni okvir PCP-a, pruži pregled najznačajnijih algoritamskih pristupa u literaturi, te eksperimentalno uporedi efikasnost egzaktnih metoda sa savremenim metaheuristikama.
 
+\subsection{Formalna definicija problema}
+
+Neka je $G=(V,E)$ jednostavan neusmjeren graf. Neka je $\mathcal{P}=\{V_1, V_2, \dots, V_p\}$ particija skupa čvorova $V$ na $p$ disjunktnih nepraznih podskupova, tako da važi $V_i \cap V_j = \emptyset$ za $i \neq j$ i $\bigcup_{i=1}^p V_i = V$.
+
+\textbf{Definicija 1 (Dozvoljena selekcija).} Skup $S \subseteq V$ naziva se \textit{dozvoljena selekcija} ako sadrži tačno po jedan čvor iz svake particije skupa $\mathcal{P}$, odnosno:
+\[
+|S \cap V_i| = 1, \qquad \forall i \in \{1, \dots, p\}.
+\]
+
+Neka je $G[S]$ \textit{indukovani podgraf} grafa $G$ definisan skupom čvorova $S$. Indukovani podgraf $G[S]$ sadrži samo one čvorove koji su izabrani dozvoljenom selekcijom, kao i sve ivice koje su u originalnom grafu postojale između tih čvorova.
+
+\textbf{Optimizaciona verzija PCP-a.} Cilj je pronaći dozvoljenu selekciju $S$ takvu da je hromatski broj indukovanog podgrafa minimalan:
+\[
+\min_{S} \; \chi(G[S]).
+\]
+
+Minimalna vrijednost $\chi(G[S])$ preko svih dozvoljenih selekcija naziva se \textit{particioni hromatski broj} i označava se sa $\chi_P(G,\mathcal{P})$.
+
+\textbf{Računarska složenost i NP-težina.}
+Formalno, računarska složenost PCP-a može se okarakterisati polazeći od njegove veze sa klasičnim problemom bojenja čvorova grafa. Klasični problem bojenja čvorova grafa je specijalni slučaj PCP-a u kojem je svaka particija sastavljena od samo jednog čvora, tj. $V_i = \{v_i\}$. U tom slučaju, izbor čvorova je fiksiran ($S = V$), pa se PCP svodi na GCP. S obzirom na to da je GCP dokazano NP-težak problem, direktno slijedi da je i PCP NP-težak.
+
+
+\subsection{Ilustrativni primjer}
+
+Radi ilustracije problema bojenja particija i uticaja selekcije čvorova na proces bojenja, na slici \ref{fig:pcp-primjer} prikazan je primjer PCP-a sa tri particije. Konkretno, prikazana je selekcija $\{a_1, b_2, c_1\}$ koja inducira podgraf obojiv sa dvije boje. Iako je polazni graf gusto povezan, izbor čvorova direktno utiče na hromatski broj indukovanog podgrafa, što ilustruje suštinsku zavisnost između faze selekcije i procesa bojenja u PCP-u. Drugačiji izbor čvorova iz istih particija može dovesti do indukovanog podgrafa koji zahtijeva veći broj boja.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  v/.style={circle, draw, thick, minimum size=8mm, inner sep=0pt, font=\footnotesize},
+  sel1/.style={circle, draw, very thick, fill=blue!25, minimum size=8mm, inner sep=0pt, font=\footnotesize},
+  sel2/.style={circle, draw, very thick, fill=red!25, minimum size=8mm, inner sep=0pt, font=\footnotesize},
+  e/.style={thick}
+]
+
+% Particija V1
+\node[sel1] (a1) at (0,2) {$a_1$};
+\node[v]    (a2) at (0,0.5) {$a_2$};
+
+% Particija V2
+\node[v]    (b1) at (2.5,2) {$b_1$};
+\node[sel2] (b2) at (2.5,0.5) {$b_2$};
+
+% Particija V3
+\node[sel1] (c1) at (5,2) {$c_1$};
+\node[v]    (c2) at (5,0.5) {$c_2$};
+
+% Ivice
+\draw[e] (a1)--(b1);
+\draw[e] (a1)--(b2);
+\draw[e] (a2)--(b1);
+\draw[e] (a2)--(b2);
+
+\draw[e] (b1)--(c1);
+\draw[e] (b1)--(c2);
+\draw[e] (b2)--(c1);
+\draw[e] (b2)--(c2);
+
+\draw[e] (a1)--(c2);
+\draw[e] (a2)--(c1);
+\draw[e] (a2)--(c2);
+
+% Okviri particija
+\begin{scope}[on background layer]
+  \node[draw, dashed, rounded corners, fit=(a1)(a2), inner sep=6pt, label=below:$V_1$] {};
+  \node[draw, dashed, rounded corners, fit=(b1)(b2), inner sep=6pt, label=below:$V_2$] {};
+  \node[draw, dashed, rounded corners, fit=(c1)(c2), inner sep=6pt, label=below:$V_3$] {};
+\end{scope}
+
+\end{tikzpicture}
+
+\caption{Primjer problema bojenja particija (PCP). Iz svakog skupa $V_i$ bira se tačno jedan čvor; izabrani čvorovi su označeni bojom i formiraju indukovani podgraf.}
+\label{fig:pcp-primjer}
+\end{figure}
+
+
+\subsection{Pregled postojeće literature}
+
+U radu \textcite{liSimha2000pcp} autori su prilagodili klasične heurističke algoritme bojenja, poput \textit{Largest-First} i \textit{Smallest-Last}, za potrebe particionisanih grafova. U istom radu definisan je i početni skup testnih instanci zasnovanih na realnim mrežnim topologijama, uključujući i \textit{Nsfnet} (\textit{National Science Foundation Net}).
+
+U domenu egzaktnih metoda, značajan doprinos dali su \textcite{frotaEtAl2010branchcut}, koji su razvili \textit{branch-and-cut} algoritam zasnovan na formulaciji predstavnika. Iako je ovaj pristup omogućio rješavanje instanci srednje veličine, pokazao je ograničenja pri rastu gustine konflikata. Alternativni egzaktni pristup, zasnovan na \textit{branch-and-price} tehnici i Dantzig--Wolfe dekompoziciji, predstavljen je u radu \textcite{hoshinoEtAl2011branchprice}.
+
+Novija literatura, poput rada \textcite{FURINI2018170}, donosi unapređenje ILP (engl. \textit{Integer Linear Programming}) formulacije i efikasne metaheuristike zasnovane na adaptivnoj pretrazi. U ovom radu korišćene su i objedinjene tri klase instanci koje se danas često koriste za poređenje algoritama:
+\begin{itemize}
+    \item \textbf{Random:} slučajno generisani grafovi sa različitim gustinama konflikata.
+    \item \textbf{Nsfnet:} instance izvedene iz realne topologije internet mreže Sjedinjenih Američkih Država.
+    \item \textbf{Ring:} grafovi sa prstenastom strukturom, karakteristični za određene topologije optičkih mreža.
+\end{itemize}
+
+U eksperimentalnom dijelu ovog seminarskog rada koristiće se navedene klase instanci radi evaluacije implementiranih algoritama.
+
+
+
+\section{Metodologija i algoritmi}
+Ovo poglavlje organizujemo tako da jasno razdvojimo (i) egzaktne metode, koje služe kao referentna tačka na malim instancama i daju dokazivo optimalna rješenja, i (ii) heurističke/metaheurističke metode, koje ciljaju veće instance gdje je optimalnost računski preskupa.
+
+
+\subsection{Egzaktna metoda: model cjelobrojnog linearnog programiranja}
+
+Egzaktno rješavanje problema bojenja particija podrazumijeva pronalaženje dozvoljene selekcije čvorova i odgovarajućeg bojenja takvog da je ukupan broj korištenih boja minimalan. S obzirom na to da je PCP NP-težak problem, potpuna pretraga prostora rješenja postaje neizvodljiva već za instance umjerene veličine. Zbog toga se u literaturi PCP često modeluje kao problem \textit{cjelobrojnog linearnog programiranja} (engl. \textit{Integer Linear Programming} -- ILP), što omogućava optimalno rješavanje manjih instanci i služi kao referentna tačka za poređenje sa heurističkim i metaheurističkim pristupima.
+
+U ovom radu koristi se ILP formulacija zasnovana na dodjeli boja (engl. \textit{assignment formulation}), koja predstavlja standardni i intuitivan pristup za rješavanje problema selektivnog bojenja \parencite{frotaEtAl2010branchcut,FURINI2018170}. Posebna prednost ove formulacije jeste u tome što selekcija čvorova i njihovo bojenje nisu razdvojeni u dvije faze, već su objedinjeni u jedinstvenu odluku.
+
+\subsubsection{Matematička formulacija modela}
+
+Neka je $K$ gornja granica broja boja. U najgorem slučaju može se uzeti $K = p$, gdje je $p$ broj particija, budući da se uvijek može dodijeliti različita boja svakom izabranom čvoru.
+
+Model koristi sljedeće binarne varijable:
+\begin{itemize}
+    \item $y_{v,c} \in \{0,1\}$ -- ima vrijednost 1 ako je čvor $v \in V$ izabran i obojen bojom $c \in \{1,\dots,K\}$, a 0 inače.
+    \item $w_c \in \{0,1\}$ -- ima vrijednost 1 ako je boja $c$ upotrijebljena za bojenje bar jednog čvora, a 0 inače.
+\end{itemize}
+
+U ovoj formulaciji, selekcija čvorova i dodjela boja objedinjeni su u jedinstvenu odluku putem varijabli $y_{v,c}$, čime se izbjegava uvođenje eksplicitnih selekcionih varijabli i dobija kompaktniji ILP model.
+
+\paragraph{Funkcija cilja:}
+Cilj je minimizovati ukupan broj upotrijebljenih boja:
+\begin{equation}
+\min \sum_{c=1}^{K} w_c.
+\end{equation}
+
+\paragraph{Ograničenja modela:}
+Kako bi rješenje bilo dopustivo, moraju biti zadovoljeni sljedeći uslovi.
+
+\begin{enumerate}
+    \item \textbf{Jedinstvena selekcija po particiji:}  
+    Iz svake particije $V_i \in \mathcal{P}$ mora biti izabran tačno jedan čvor i dodijeljena mu tačno jedna boja:
+    \begin{equation}
+    \sum_{v \in V_i} \sum_{c=1}^{K} y_{v,c} = 1,
+    \qquad \forall V_i \in \mathcal{P}.
+    \end{equation}
+
+    \item \textbf{Izbjegavanje konflikata:}  
+    Ako su čvorovi $u$ i $v$ povezani ivicom u grafu $G$, oni ne mogu biti obojeni istom bojom:
+    \begin{equation}
+    y_{u,c} + y_{v,c} \le 1,
+    \qquad \forall uv \in E,\ \forall c \in \{1,\dots,K\}.
+    \end{equation}
+    Ovo ograničenje obezbjeđuje da nijedna dva susjedna izabrana čvora ne dijele istu boju.
+
+    \item \textbf{Praćenje upotrebe boja:}  
+    Boja $c$ se smatra upotrijebljenom ako je dodijeljena bar jednom čvoru:
+    \begin{equation}
+    y_{v,c} \le w_c,
+    \qquad \forall v \in V,\ \forall c \in \{1,\dots,K\}.
+    \end{equation}
+
+    \item \textbf{Eliminacija simetričnih rješenja:}  
+    Kako bi se izbjegla ekvivalentna rješenja koja se razlikuju samo permutacijom boja i smanjio prostor pretrage, uvodi se ograničenje koje nameće fiksni redoslijed korišćenja boja:
+    \begin{equation}
+    w_c \ge w_{c+1},
+    \qquad \forall c \in \{1,\dots,K-1\}.
+    \end{equation}
+\end{enumerate}
+
+\subsubsection{Softverska implementacija i solveri}
+
+Postavljeni ILP model implementiran je u programskom jeziku Python korišćenjem biblioteke \textit{Google OR-Tools}\footnote{\url{https://developers.google.com/optimization}}, dok je za njegovo rješavanje korišćen egzaktni MIP solver \textit{SCIP} (\textit{Solving Constraint Integer Programs}) \footnote{\url{https://www.scipopt.org}}, koji je široko zastupljen u akademskim istraživanjima.
+
+S obzirom na eksponencijalnu složenost problema, u eksperimentalnom dijelu uvedeno je vremensko ograničenje od 300 sekundi po instanci. U slučajevima kada solver ne pronađe optimalno rješenje u zadatom vremenu, bilježi se najbolje pronađeno dopustivo rješenje, kao i pripadajući \textit{MIP gap}, koji predstavlja relativno odstupanje između dobijenog rješenja i najbolje poznate donje granice.
+
+\pagebreak
+\section{Eksperimentalna evaluacija}
+Eksperimentalna evaluacija biće sprovedena na \textit{random}, \textit{nsfnet} i \textit{ring} instancama.
+
+\pagebreak
+\section{Diskusija}
+% todo: dodati na kraju
+
+\section{Zaključak}
+% todo: dodati na kraju
+
 \clearpage
 \phantomsection
 \printbibliography[heading=bibintoc, title={Literatura}]
