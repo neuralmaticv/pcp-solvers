@@ -1,3 +1,14 @@
+"""
+PCP Instance data structure and parser.
+
+Instance file format:
+- Line 1: n (number of vertices, numbered 0 to n-1)
+- Line 2: m (number of edges)
+- Line 3: p (number of partitions)
+- Next m lines: edges as "u v" pairs
+- Next p lines: partition definitions (space-separated vertex lists)
+"""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 

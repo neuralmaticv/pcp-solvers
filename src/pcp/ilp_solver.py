@@ -1,3 +1,36 @@
+"""
+ILP Solver for the Partition Coloring Problem.
+
+## ILP Formulation (Compact)
+
+### Decision Variables:
+- y[v,c] ∈ {0,1}: 1 if vertex v is selected AND assigned color c
+- w[c] ∈ {0,1}: 1 if color c is used by any selected vertex
+
+### Constraints:
+1. Partition selection + color assignment (combined):
+   Exactly one vertex-color pair per partition
+   ∑_{v ∈ P_k} ∑_c y[v,c] = 1, ∀k
+
+2. Proper coloring: Adjacent vertices cannot share a color
+   y[u,c] + y[v,c] ≤ 1, ∀(u,v) ∈ E, ∀c
+
+3. Color usage: Track which colors are used
+   y[v,c] ≤ w[c], ∀v, ∀c
+
+### Objective:
+Minimize ∑_c w[c]
+
+### Upper bound on colors:
+At most k colors are needed (where k = number of partitions),
+since we select exactly k vertices.
+
+### Note on formulation:
+The x[v] variables (vertex selection) are eliminated since constraint 1
+implicitly ensures exactly one vertex is selected per partition with
+exactly one color assigned.
+"""
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -90,6 +123,22 @@ class ILPSolver:
         """
         # Create solver
         solver = pywraplp.Solver.CreateSolver(self.solver_name)
+
+        # Handle case where solver is not available
+        if solver is None:
+            return SolverResult(
+                instance_name=instance.name,
+                num_vertices=instance.num_vertices,
+                num_edges=instance.num_edges,
+                num_partitions=instance.num_partitions,
+                status=SolverStatus.ERROR,
+                num_colors=None,
+                runtime_seconds=0.0,
+                selected_vertices=None,
+                vertex_colors=None,
+                gap=None,
+            )
+
         solver.SetTimeLimit(int(self.time_limit_seconds * 1000))
 
         # Upper bound on colors: at most k partitions => at most k colors needed
