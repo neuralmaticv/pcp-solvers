@@ -1,0 +1,11 @@
+instance,vertices,edges,partitions,status,colors,runtime_s,gap
+nsf_p0.9_s1,216,2921,161,optimal,12,247.518,0.0000
+nsf_p0.9_s2,231,3324,167,feasible,14,303.504,0.8003
+nsf_p0.9_s3,217,2849,166,feasible,12,303.214,0.6878
+nsf_p0.9_s4,226,3118,165,feasible,16,303.345,0.7895
+nsf_p0.9_s5,234,3379,169,feasible,13,303.252,0.7729
+nsf_p1.0_s1,250,3948,182,feasible,15,323.262,0.8655
+nsf_p1.0_s2,251,3973,182,feasible,14,303.922,0.8356
+nsf_p1.0_s3,238,3419,182,feasible,14,303.944,0.8562
+nsf_p1.0_s4,257,4261,182,feasible,14,314.362,0.8558
+nsf_p1.0_s5,248,3827,182,feasible,14,310.534,0.8568
