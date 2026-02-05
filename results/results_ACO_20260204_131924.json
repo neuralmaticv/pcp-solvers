@@ -1,0 +1,13 @@
+{
+  "solver": "ACO",
+  "num_ants": "num_partitions",
+  "num_iterations": 50,
+  "alpha": 1.0,
+  "beta": 2.0,
+  "rho": 0.1,
+  "initial_pheromone": 1.0,
+  "num_runs": 10,
+  "base_seed": null,
+  "timestamp": "2026-02-04T13:19:24.942712",
+  "num_instances": 280
+}
