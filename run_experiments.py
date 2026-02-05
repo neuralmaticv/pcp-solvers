@@ -3,7 +3,7 @@
 Main script to run PCP experiments.
 
 Usage:
-    # Run on a single instance
+    # Run on a single instance with ILP
     uv run python run_experiments.py --instance instances/ring/ring_n10p0.1s1.txt
 
     # Run on a family of instances (on easier instances - from the start)
@@ -15,17 +15,26 @@ Usage:
     # Run on all families
     uv run python run_experiments.py --all
 
-    # Run with custom time limit in seconds
+    # Run with custom time limit in seconds (ILP)
     uv run python run_experiments.py --family random --time-limit 60
 
-    # NOTE: ILP solver is used by default. Metaheuristic solvers will be added later.
+    # Run with ACO solver (default: 20 independent runs per instance)
+    uv run python run_experiments.py --solver ACO --family ring
+
+    # Run ACO on first 10 instances only (for quick testing)
+    uv run python run_experiments.py --solver ACO --family ring --max-instances 10
+
+    # Run ACO with custom parameters (10 runs per instance, 50 iterations each)
+    uv run python run_experiments.py --solver ACO --family ring --aco-runs 10 --aco-iterations 50
+
     # ILP uses SCIP backend by default, other backends can be selected with --ilp-backend option.
 """
 
 import argparse
 from pathlib import Path
+from typing import Union
 
-from src.pcp import ILPSolver, PCPInstance
+from src.pcp import ACOResult, ACOSolver, ILPSolver, PCPInstance, SolverResult
 from src.pcp.runner import ExperimentRunner
 
 
@@ -38,14 +47,16 @@ def main():
     group.add_argument("--family", type=str, help="Instance family to run (e.g., 'ring', 'random')")
     group.add_argument("--all", action="store_true", help="Run on all instance families")
 
-    # Solver parameters, will be extended with metaheuristics later
+    # Solver selection
     parser.add_argument(
         "--solver",
         type=str,
         default="ILP",
-        choices=["ILP"],
+        choices=["ILP", "ACO"],
         help="Solver type to use (default: ILP)",
     )
+
+    # ILP-specific parameters
     parser.add_argument(
         "--ilp-backend",
         type=str,
@@ -57,8 +68,48 @@ def main():
         "--time-limit",
         type=float,
         default=300.0,
-        help="Time limit per instance in seconds (default: 300)",
+        help="Time limit per instance in seconds for ILP (default: 300)",
     )
+
+    # ACO-specific parameters
+    parser.add_argument(
+        "--aco-iterations",
+        type=int,
+        default=100,
+        help="Number of ACO iterations per run (default: 100)",
+    )
+    parser.add_argument(
+        "--aco-runs",
+        type=int,
+        default=20,
+        help="Number of independent ACO runs per instance (default: 20)",
+    )
+    parser.add_argument(
+        "--aco-alpha",
+        type=float,
+        default=1.0,
+        help="ACO pheromone importance (default: 1.0)",
+    )
+    parser.add_argument(
+        "--aco-beta",
+        type=float,
+        default=2.0,
+        help="ACO heuristic importance (default: 2.0)",
+    )
+    parser.add_argument(
+        "--aco-rho",
+        type=float,
+        default=0.1,
+        help="ACO evaporation rate (default: 0.1)",
+    )
+    parser.add_argument(
+        "--aco-seed",
+        type=int,
+        default=None,
+        help="ACO base random seed for reproducibility (default: None = random)",
+    )
+
+    # Common parameters
     parser.add_argument("--verbose", action="store_true", help="Print detailed solver output")
 
     # Experiment parameters
@@ -85,19 +136,27 @@ def main():
     args = parser.parse_args()
 
     # Create solver based on type
+    solver: Union[ILPSolver, ACOSolver]
     if args.solver == "ILP":
         solver = ILPSolver(
             time_limit_seconds=args.time_limit,
             solver_name=args.ilp_backend,
             verbose=args.verbose,
         )
-    elif args.solver == "metaheuristics":
-        # TODO: Implement metaheuristic solvers
-        raise NotImplementedError("Metaheuristic solvers not yet implemented")
+    elif args.solver == "ACO":
+        solver = ACOSolver(
+            num_iterations=args.aco_iterations,
+            num_runs=args.aco_runs,
+            alpha=args.aco_alpha,
+            beta=args.aco_beta,
+            rho=args.aco_rho,
+            base_seed=args.aco_seed,
+            verbose=args.verbose,
+        )
     else:
         raise ValueError(f"Unknown solver type: {args.solver}")
 
-    # Create runner
+    # Create unified runner
     runner = ExperimentRunner(solver, output_dir=args.output_dir)
 
     # Run experiments
@@ -110,19 +169,29 @@ def main():
         result = solver.solve(instance)
         runner.results.append(result)
 
-        print(f"\nResult: {result.status.value}")
-        if result.num_colors is not None:
-            print(f"  Partition chromatic number: {result.num_colors}")
-            print(f"  Selected vertices: {result.selected_vertices}")
-            print(f"  Color assignment: {result.vertex_colors}")
-
-            # Verify solution
+        # Print result based on solver type
+        if isinstance(result, SolverResult) and isinstance(solver, ILPSolver):
+            print(f"\nResult: {result.status.value}")
+            if result.num_colors is not None:
+                print(f"  Partition chromatic number: {result.num_colors}")
+                print(f"  Selected vertices: {result.selected_vertices}")
+                print(f"  Color assignment: {result.vertex_colors}")
+                if solver.verify_solution(instance, result):
+                    print("  Solution verified: VALID")
+                else:
+                    print("  Solution verified: INVALID!")
+            print(f"  Runtime: {result.runtime_seconds:.3f}s")
+        elif isinstance(result, ACOResult) and isinstance(solver, ACOSolver):
+            print(f"\nResult ({result.num_runs} runs):")
+            print(f"  Best colors: {result.best_colors}")
+            print(f"  Avg colors: {result.avg_colors:.2f}")
+            print(f"  Std colors: {result.std_colors:.2f}")
+            print(f"  All runs: {result.all_colors}")
             if solver.verify_solution(instance, result):
-                print("  Solution verified: VALID")
+                print("  Best solution verified: VALID")
             else:
-                print("  Solution verified: INVALID!")
-
-        print(f"  Runtime: {result.runtime_seconds:.3f}s")
+                print("  Best solution verified: INVALID!")
+            print(f"  Total runtime: {result.total_runtime_seconds:.3f}s")
 
     elif args.family:
         # Single family mode
@@ -148,7 +217,8 @@ def main():
 
     # Save results
     if runner.results:
-        runner.save_results_csv(args.output_file, solver_name=args.solver)
+        csv_path = runner.save_results_csv(args.output_file)
+        runner.save_params_json(csv_path)
 
 
 if __name__ == "__main__":
