@@ -39,7 +39,7 @@ class TabuSearchResult:
     std_colors: float
     total_runtime_seconds: float
     all_colors: list[int] = field(default_factory=list)
-    best_selected_vertices: Optional[list[int]] = None
+    best_selected_vertices: Optional[dict[int, int]] = None
     best_vertex_colors: Optional[dict[int, int]] = None
 
     def to_csv_row(self) -> str:
@@ -112,7 +112,7 @@ class TabuSearchSolver:
         start_time = time.time()
 
         all_colors: list[int] = []
-        best_selection: Optional[list[int]] = None
+        best_selection: Optional[dict[int, int]] = None
         best_coloring: Optional[dict[int, int]] = None
         best_num_colors: Optional[int] = None
 
@@ -170,7 +170,7 @@ class TabuSearchSolver:
         self,
         instance: PCPInstance,
         seed: Optional[int],
-    ) -> tuple[Optional[int], Optional[list[int]], Optional[dict[int, int]]]:
+    ) -> tuple[Optional[int], Optional[dict[int, int]], Optional[dict[int, int]]]:
         """Execute a single run."""
         rng = random.Random(seed)
 
@@ -214,7 +214,7 @@ class TabuSearchSolver:
         self,
         instance: PCPInstance,
         rng: random.Random,
-    ) -> tuple[list[int], dict[int, int]]:
+    ) -> tuple[dict[int, int], dict[int, int]]:
         """
         Construction heuristic: One Step Color Degree (onestepCD).
 
@@ -224,13 +224,13 @@ class TabuSearchSolver:
 
         Returns:
             Tuple of (selected_vertices, coloring)
-            - selected_vertices: List of selected vertices (one per partition)
+            - selected_vertices: Dict mapping partition index to selected vertex
             - coloring: Dict mapping selected vertices to colors
         """
         # Build induced graph (remove edges within same partition)
         induced_adj = self._build_induced_adjacency(instance)
 
-        selected: list[int] = []  # V' in paper
+        selected: dict[int, int] = {}  # partition_idx -> vertex (V' in paper)
         coloring: dict[int, int] = {}  # color assignment
         remaining_partitions = list(range(instance.num_partitions))
 
@@ -268,11 +268,11 @@ class TabuSearchSolver:
                 color += 1
 
             # Assign color
-            selected.append(x)
+            partition_idx = instance.vertex_to_partition[x]
+            selected[partition_idx] = x
             coloring[x] = color
 
             # Remove partition containing x from remaining
-            partition_idx = instance.vertex_to_partition[x]
             remaining_partitions.remove(partition_idx)
 
         return selected, coloring
@@ -281,7 +281,7 @@ class TabuSearchSolver:
         self,
         vertex: int,
         adjacency: dict[int, set[int]],
-        selected: list[int],
+        selected: dict[int, int],
         coloring: dict[int, int],
     ) -> int:
         """
@@ -292,7 +292,7 @@ class TabuSearchSolver:
         Args:
             vertex: Vertex to evaluate
             adjacency: Adjacency dict
-            selected: List of already selected/colored vertices
+            selected: Dict mapping partition to selected vertex
             coloring: Current color assignment
 
         Returns:
@@ -307,11 +307,11 @@ class TabuSearchSolver:
     def _ts_pcp(
         self,
         instance: PCPInstance,
-        prev_selection: list[int],
+        prev_selection: dict[int, int],
         prev_coloring: dict[int, int],
         max_colors: int,
         rng: random.Random,
-    ) -> Optional[tuple[list[int], dict[int, int]]]:
+    ) -> Optional[tuple[dict[int, int], dict[int, int]]]:
         """
         Tabu Search for PCP - attempts to find feasible solution with max_colors - 1 colors.
 
@@ -331,13 +331,13 @@ class TabuSearchSolver:
         # Build initial solution S' by randomly recoloring nodes with color maxC
         S_prime_selection = prev_selection.copy()
         S_prime_coloring = {}
-        for v in S_prime_selection:
-            old_color = prev_coloring[v]
+        for partition_idx, vertex in S_prime_selection.items():
+            old_color = prev_coloring[vertex]
             if old_color >= target_colors:
                 new_color = rng.randint(0, target_colors - 1)
             else:
                 new_color = old_color
-            S_prime_coloring[v] = new_color
+            S_prime_coloring[vertex] = new_color
 
         # Free tabu list and set iter = 0
         tabu_list: dict[tuple[int, int], int] = {}
@@ -472,7 +472,7 @@ class TabuSearchSolver:
 
     def _count_conflicts_fast(
         self,
-        selection: list[int],
+        selection: dict[int, int],
         coloring: dict[int, int],
         adjacency: dict[int, set[int]],
         instance: PCPInstance,
@@ -484,7 +484,7 @@ class TabuSearchSolver:
         that have the same color. This implementation minimizes redundant lookups.
 
         Args:
-            selection: Selected vertices (one per partition)
+            selection: Dict mapping partition to selected vertex
             coloring: Color assignment
             adjacency: Adjacency dict (induced, no intra-partition edges)
             instance: PCP instance
@@ -493,16 +493,16 @@ class TabuSearchSolver:
             Number of conflicts
         """
         conflicts = 0
-        selected_set = set(selection)
+        selected_vertices = set(selection.values())
 
-        for v in selection:
+        for v in selection.values():
             v_color = coloring.get(v)
             if v_color is None:
                 continue
 
             # Count conflicts with neighbors
             for neighbor in adjacency.get(v, set()):
-                if neighbor in selected_set:
+                if neighbor in selected_vertices:
                     neighbor_color = coloring.get(neighbor)
                     if neighbor_color == v_color and v < neighbor:
                         # Only count each conflict once (v < neighbor ensures this)
@@ -512,7 +512,7 @@ class TabuSearchSolver:
 
     def _get_conflict_components(
         self,
-        selection: list[int],
+        selection: dict[int, int],
         coloring: dict[int, int],
         adjacency: dict[int, set[int]],
         instance: PCPInstance,
@@ -521,7 +521,7 @@ class TabuSearchSolver:
         Get set of partition indices involved in conflicts.
 
         Args:
-            selection: Selected vertices (one per partition)
+            selection: Dict mapping partition to selected vertex
             coloring: Color assignment
             adjacency: Adjacency dict (induced, no intra-partition edges)
             instance: PCP instance
@@ -530,15 +530,15 @@ class TabuSearchSolver:
             Set of partition indices with conflicts
         """
         conflict_components = set()
-        selected_set = set(selection)
+        selected_vertices = set(selection.values())
 
-        for v in selection:
+        for v in selection.values():
             v_color = coloring.get(v)
             if v_color is None:
                 continue
 
             for neighbor in adjacency.get(v, set()):
-                if neighbor in selected_set:
+                if neighbor in selected_vertices:
                     neighbor_color = coloring.get(neighbor)
                     if neighbor_color == v_color:
                         # Both partitions are in conflict
@@ -597,11 +597,10 @@ class TabuSearchSolver:
         if len(result.best_selected_vertices) != instance.num_partitions:
             return False
 
-        selected_set = set(result.best_selected_vertices)
-        for partition in instance.partitions:
-            count = sum(1 for v in partition if v in selected_set)
-            if count != 1:
-                return False
+        # Check: each partition has exactly one selected vertex
+        selected_set = set(result.best_selected_vertices.values())
+        if len(selected_set) != instance.num_partitions:
+            return False
 
         # Check coloring validity (no conflicts)
         induced_adj = self._build_induced_adjacency(instance)
