@@ -1,7 +1,7 @@
 """
 Experiment runner for PCP instances.
 
-Supports both ILP and ACO solvers with unified interface.
+Supports ILP, ACO, and TabuSearch solvers with unified interface.
 """
 
 import csv
@@ -14,10 +14,11 @@ from typing import Protocol, Union
 from .aco_solver import ACOResult, ACOSolver
 from .ilp_solver import ILPSolver, SolverResult
 from .instance import PCPInstance
+from .tabu_search import TabuSearchResult, TabuSearchSolver
 
 
 # Type alias for results
-Result = Union[SolverResult, ACOResult]
+Result = Union[SolverResult, ACOResult, TabuSearchResult]
 
 
 class Solver(Protocol):
@@ -30,25 +31,30 @@ class Solver(Protocol):
 class ExperimentRunner:
     """Runs experiments on PCP instances and collects results.
 
-    Supports both ILP and ACO solvers with appropriate output formatting.
+    Supports ILP, ACO, and TabuSearch solvers with appropriate output formatting.
     """
 
     def __init__(
         self,
-        solver: Union[ILPSolver, ACOSolver],
+        solver: Union[ILPSolver, ACOSolver, TabuSearchSolver],
         output_dir: Path | None = None,
     ):
         """
         Initialize the experiment runner.
 
         Args:
-            solver: The PCP solver to use (ILPSolver or ACOSolver)
+            solver: The PCP solver to use (ILPSolver, ACOSolver, or TabuSearchSolver)
             output_dir: Directory for output files (default: current directory)
         """
         self.solver = solver
         self.output_dir = Path(output_dir) if output_dir else Path.cwd()
         self.results: list[Result] = []
-        self._solver_type = "ACO" if isinstance(solver, ACOSolver) else "ILP"
+        if isinstance(solver, ACOSolver):
+            self._solver_type = "ACO"
+        elif isinstance(solver, TabuSearchSolver):
+            self._solver_type = "TabuSearch"
+        else:
+            self._solver_type = "ILP"
 
     def run_instance(self, filepath: Path) -> Result:
         """Run solver on a single instance."""
@@ -103,7 +109,7 @@ class ExperimentRunner:
 
     def _print_result_line(self, result: Result) -> None:
         """Print a single result line based on solver type."""
-        if isinstance(result, ACOResult):
+        if isinstance(result, (ACOResult, TabuSearchResult)):
             print(
                 f"best={result.best_colors}, avg={result.avg_colors:.2f}, "
                 f"std={result.std_colors:.2f} in {result.total_runtime_seconds:.2f}s"
@@ -174,7 +180,7 @@ class ExperimentRunner:
             writer = csv.writer(f)
 
             # Write header based on solver type
-            if self._solver_type == "ACO":
+            if self._solver_type in ["ACO", "TabuSearch"]:
                 writer.writerow(
                     ["instance", "vertices", "edges", "partitions", "runs", "best", "avg", "std", "total_time_s"]
                 )
@@ -185,7 +191,7 @@ class ExperimentRunner:
 
             # Write data rows
             for result in self.results:
-                if isinstance(result, ACOResult):
+                if isinstance(result, (ACOResult, TabuSearchResult)):
                     writer.writerow(
                         [
                             result.instance_name,
@@ -220,8 +226,6 @@ class ExperimentRunner:
         """
         Save solver parameters to a JSON file alongside the CSV.
 
-        Only applicable for ACO solver.
-
         Args:
             csv_filepath: Path to the CSV file (JSON will be saved with same name)
 
@@ -230,7 +234,7 @@ class ExperimentRunner:
         """
         json_filepath = csv_filepath.with_suffix(".json")
 
-        if isinstance(self.solver, ACOSolver):
+        if isinstance(self.solver, (ACOSolver, TabuSearchSolver)):
             params = self.solver.get_params()
         else:
             params = {
@@ -260,14 +264,14 @@ class ExperimentRunner:
 
         total = len(self.results)
 
-        if self._solver_type == "ACO":
-            aco_results = [r for r in self.results if isinstance(r, ACOResult)]
-            avg_best = sum(r.best_colors for r in aco_results) / total
-            avg_avg = sum(r.avg_colors for r in aco_results) / total
-            avg_time = sum(r.total_runtime_seconds for r in aco_results) / total
+        if self._solver_type in ["ACO", "TabuSearch"]:
+            heuristic_results = [r for r in self.results if isinstance(r, (ACOResult, TabuSearchResult))]
+            avg_best = sum(r.best_colors for r in heuristic_results) / total
+            avg_avg = sum(r.avg_colors for r in heuristic_results) / total
+            avg_time = sum(r.total_runtime_seconds for r in heuristic_results) / total
 
             print(f"Total instances: {total}")
-            print(f"Runs per instance: {aco_results[0].num_runs if aco_results else 'N/A'}")
+            print(f"Runs per instance: {heuristic_results[0].num_runs if heuristic_results else 'N/A'}")
             print(f"Avg best colors: {avg_best:.2f}")
             print(f"Avg avg colors: {avg_avg:.2f}")
             print(f"Avg time per instance: {avg_time:.2f}s")
@@ -298,13 +302,13 @@ class ExperimentRunner:
             print("No results to display.")
             return
 
-        if self._solver_type == "ACO":
-            self._print_aco_table()
+        if self._solver_type in ["ACO", "TabuSearch"]:
+            self._print_heuristic_table()
         else:
             self._print_ilp_table()
 
-    def _print_aco_table(self):
-        """Print ACO results as a formatted table."""
+    def _print_heuristic_table(self):
+        """Print heuristic solver (ACO/TabuSearch) results as a formatted table."""
         print(
             f"\n{'Instance':<25} {'V':>5} {'E':>6} {'P':>4} "
             f"{'Runs':>5} {'Best':>5} {'Avg':>7} {'Std':>6} {'Time':>8}"
@@ -312,7 +316,7 @@ class ExperimentRunner:
         print("-" * 85)
 
         for r in self.results:
-            if isinstance(r, ACOResult):
+            if isinstance(r, (ACOResult, TabuSearchResult)):
                 print(
                     f"{r.instance_name:<25} {r.num_vertices:>5} {r.num_edges:>6} "
                     f"{r.num_partitions:>4} {r.num_runs:>5} {r.best_colors:>5} "

@@ -8,6 +8,7 @@ from .aco_solver import ACOResult, ACOSolver
 from .dsatur import count_colors, dsatur_coloring, verify_coloring
 from .ilp_solver import ILPSolver, SolverResult, SolverStatus
 from .instance import PCPInstance
+from .tabu_search import TabuSearchResult, TabuSearchSolver
 
 __all__ = [
     # Instance
@@ -19,6 +20,9 @@ __all__ = [
     # ACO Solver
     "ACOSolver",
     "ACOResult",
+    # Tabu Search Solver
+    "TabuSearchSolver",
+    "TabuSearchResult",
     # DSATUR utilities
     "dsatur_coloring",
     "count_colors",

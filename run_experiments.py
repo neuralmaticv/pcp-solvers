@@ -27,6 +27,12 @@ Usage:
     # Run ACO with custom parameters (10 runs per instance, 50 iterations each)
     uv run python run_experiments.py --solver ACO --family ring --aco-runs 10 --aco-iterations 50
 
+    # Run with TabuSearch solver (default: 20 independent runs per instance)
+    uv run python run_experiments.py --solver TabuSearch --family ring
+
+    # Run TabuSearch with custom parameters (10 runs, Fend=10)
+    uv run python run_experiments.py --solver TabuSearch --family ring --ts-runs 10 --ts-iterations 10
+
     # ILP uses SCIP backend by default, other backends can be selected with --ilp-backend option.
 """
 
@@ -34,7 +40,7 @@ import argparse
 from pathlib import Path
 from typing import Union
 
-from src.pcp import ACOResult, ACOSolver, ILPSolver, PCPInstance, SolverResult
+from src.pcp import ACOResult, ACOSolver, ILPSolver, PCPInstance, SolverResult, TabuSearchResult, TabuSearchSolver
 from src.pcp.runner import ExperimentRunner
 
 
@@ -52,7 +58,7 @@ def main():
         "--solver",
         type=str,
         default="ILP",
-        choices=["ILP", "ACO"],
+        choices=["ILP", "ACO", "TabuSearch"],
         help="Solver type to use (default: ILP)",
     )
 
@@ -109,6 +115,38 @@ def main():
         help="ACO base random seed for reproducibility (default: None = random)",
     )
 
+    # TabuSearch-specific parameters
+    parser.add_argument(
+        "--ts-iterations",
+        type=int,
+        default=5,
+        help="TabuSearch max_iter_factor (Fend in paper, default: 5)",
+    )
+    parser.add_argument(
+        "--ts-runs",
+        type=int,
+        default=20,
+        help="Number of independent TabuSearch runs per instance (default: 20)",
+    )
+    parser.add_argument(
+        "--ts-tabu-min",
+        type=float,
+        default=0.0,
+        help="TabuSearch min tabu tenure as fraction of colors (default: 0.0)",
+    )
+    parser.add_argument(
+        "--ts-tabu-max",
+        type=float,
+        default=0.5,
+        help="TabuSearch max tabu tenure as fraction of colors (default: 0.5)",
+    )
+    parser.add_argument(
+        "--ts-seed",
+        type=int,
+        default=None,
+        help="TabuSearch base random seed for reproducibility (default: None = random)",
+    )
+
     # Common parameters
     parser.add_argument("--verbose", action="store_true", help="Print detailed solver output")
 
@@ -136,7 +174,7 @@ def main():
     args = parser.parse_args()
 
     # Create solver based on type
-    solver: Union[ILPSolver, ACOSolver]
+    solver: Union[ILPSolver, ACOSolver, TabuSearchSolver]
     if args.solver == "ILP":
         solver = ILPSolver(
             time_limit_seconds=args.time_limit,
@@ -151,6 +189,14 @@ def main():
             beta=args.aco_beta,
             rho=args.aco_rho,
             base_seed=args.aco_seed,
+            verbose=args.verbose,
+        )
+    elif args.solver == "TabuSearch":
+        solver = TabuSearchSolver(
+            tabu_tenure_range=(args.ts_tabu_min, args.ts_tabu_max),
+            max_iter_factor=args.ts_iterations,
+            num_runs=args.ts_runs,
+            base_seed=args.ts_seed,
             verbose=args.verbose,
         )
     else:
@@ -182,6 +228,17 @@ def main():
                     print("  Solution verified: INVALID!")
             print(f"  Runtime: {result.runtime_seconds:.3f}s")
         elif isinstance(result, ACOResult) and isinstance(solver, ACOSolver):
+            print(f"\nResult ({result.num_runs} runs):")
+            print(f"  Best colors: {result.best_colors}")
+            print(f"  Avg colors: {result.avg_colors:.2f}")
+            print(f"  Std colors: {result.std_colors:.2f}")
+            print(f"  All runs: {result.all_colors}")
+            if solver.verify_solution(instance, result):
+                print("  Best solution verified: VALID")
+            else:
+                print("  Best solution verified: INVALID!")
+            print(f"  Total runtime: {result.total_runtime_seconds:.3f}s")
+        elif isinstance(result, TabuSearchResult) and isinstance(solver, TabuSearchSolver):
             print(f"\nResult ({result.num_runs} runs):")
             print(f"  Best colors: {result.best_colors}")
             print(f"  Avg colors: {result.avg_colors:.2f}")
