@@ -150,6 +150,14 @@ def main():
     # Common parameters
     parser.add_argument("--verbose", action="store_true", help="Print detailed solver output")
 
+    # Parallel processing
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: all CPU cores). Set to 1 for sequential processing.",
+    )
+
     # Experiment parameters
     parser.add_argument("--max-instances", type=int, help="Maximum instances to run (for testing)")
     parser.add_argument(
@@ -203,7 +211,7 @@ def main():
         raise ValueError(f"Unknown solver type: {args.solver}")
 
     # Create unified runner
-    runner = ExperimentRunner(solver, output_dir=args.output_dir)
+    runner = ExperimentRunner(solver, output_dir=args.output_dir, num_workers=args.workers)
 
     # Run experiments
     if args.instance:

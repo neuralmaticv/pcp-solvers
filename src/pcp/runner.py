@@ -6,7 +6,9 @@ Supports ILP, ACO, and TabuSearch solvers with unified interface.
 
 import csv
 import json
+import multiprocessing
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, Union
@@ -19,6 +21,18 @@ from .tabu_search import TabuSearchResult, TabuSearchSolver
 
 # Type alias for results
 Result = Union[SolverResult, ACOResult, TabuSearchResult]
+
+
+def _process_instance_worker(
+    filepath: Path,
+    solver: Union[ILPSolver, ACOSolver, TabuSearchSolver],
+) -> Result:
+    """
+    Worker function for parallel processing of instances.
+    Must be at module level for multiprocessing to work.
+    """
+    instance = PCPInstance.from_file(filepath)
+    return solver.solve(instance)
 
 
 class Solver(Protocol):
@@ -38,6 +52,7 @@ class ExperimentRunner:
         self,
         solver: Union[ILPSolver, ACOSolver, TabuSearchSolver],
         output_dir: Path | None = None,
+        num_workers: int | None = None,
     ):
         """
         Initialize the experiment runner.
@@ -45,10 +60,12 @@ class ExperimentRunner:
         Args:
             solver: The PCP solver to use (ILPSolver, ACOSolver, or TabuSearchSolver)
             output_dir: Directory for output files (default: current directory)
+            num_workers: Number of parallel workers (default: all CPU cores)
         """
         self.solver = solver
         self.output_dir = Path(output_dir) if output_dir else Path.cwd()
         self.results: list[Result] = []
+        self.num_workers = num_workers if num_workers is not None else multiprocessing.cpu_count()
         if isinstance(solver, ACOSolver):
             self._solver_type = "ACO"
         elif isinstance(solver, TabuSearchSolver):
@@ -69,6 +86,7 @@ class ExperimentRunner:
         pattern: str = "*.txt",
         max_instances: int | None = None,
         from_end: bool = False,
+        parallel: bool = True,
     ) -> list[Result]:
         """
         Run solver on all instances in a directory.
@@ -78,6 +96,7 @@ class ExperimentRunner:
             pattern: Glob pattern for instance files
             max_instances: Maximum number of instances to run (for testing)
             from_end: If True, select instances from the end (harder instances first)
+            parallel: If True, process instances in parallel (default: True)
 
         Returns:
             List of results
@@ -91,6 +110,13 @@ class ExperimentRunner:
             else:
                 files = files[:max_instances]
 
+        if parallel and self.num_workers > 1:
+            return self._run_directory_parallel(files)
+        else:
+            return self._run_directory_sequential(files)
+
+    def _run_directory_sequential(self, files: list[Path]) -> list[Result]:
+        """Run instances sequentially (original behavior)."""
         results = []
         for i, filepath in enumerate(files):
             print(f"[{i + 1}/{len(files)}] Processing {filepath.name}...", end=" ")
@@ -104,6 +130,37 @@ class ExperimentRunner:
                 continue
 
             results.append(result)
+
+        return results
+
+    def _run_directory_parallel(self, files: list[Path]) -> list[Result]:
+        """Run instances in parallel using multiprocessing."""
+        print(f"Running {len(files)} instances in parallel using {self.num_workers} workers...")
+
+        results = []
+        completed = 0
+
+        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
+            # Submit all tasks
+            future_to_file = {
+                executor.submit(_process_instance_worker, filepath, self.solver): filepath
+                for filepath in files
+            }
+
+            # Process results as they complete
+            from concurrent.futures import as_completed
+            for future in as_completed(future_to_file):
+                filepath = future_to_file[future]
+                completed += 1
+
+                try:
+                    result = future.result()
+                    print(f"[{completed}/{len(files)}] {filepath.name}...", end=" ")
+                    self._print_result_line(result)
+                    self.results.append(result)
+                    results.append(result)
+                except Exception as e:
+                    print(f"[{completed}/{len(files)}] {filepath.name}... ERROR: {e}")
 
         return results
 
@@ -123,6 +180,7 @@ class ExperimentRunner:
         families: list[str] | None = None,
         max_per_family: int | None = None,
         from_end: bool = False,
+        parallel: bool = True,
     ) -> dict[str, list[Result]]:
         """
         Run solver on all instance families.
@@ -132,6 +190,7 @@ class ExperimentRunner:
             families: List of family names to run (default: all)
             max_per_family: Maximum instances per family (for testing)
             from_end: If True, select instances from the end (harder instances first)
+            parallel: If True, process instances in parallel (default: True)
 
         Returns:
             Dictionary mapping family name to results
@@ -152,7 +211,9 @@ class ExperimentRunner:
             print(f"Running family: {family}")
             print(f"{'=' * 60}")
 
-            results = self.run_directory(family_dir, max_instances=max_per_family, from_end=from_end)
+            results = self.run_directory(
+                family_dir, max_instances=max_per_family, from_end=from_end, parallel=parallel
+            )
             all_results[family] = results
 
         return all_results
