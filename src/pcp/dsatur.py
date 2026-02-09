@@ -16,7 +16,7 @@ to their neighbors.
 Ref: https://www.geeksforgeeks.org/dsa/dsatur-algorithm-for-graph-coloring/
 """
 
-from typing import Optional
+import heapq
 
 
 def dsatur_coloring(
@@ -38,13 +38,12 @@ def dsatur_coloring(
         >>> vertices = [0, 2, 5]
         >>> adjacency = {0: {2}, 2: {0, 5}, 5: {2}}
         >>> colors = dsatur_coloring(vertices, adjacency)
-        >>> colors  # {0: 0, 2: 1, 5: 0}
+        >>> colors  # {2: 0, 0: 1, 5: 1}
     """
     if not vertices:
         return {}
 
     vertex_set = set(vertices)
-    n = len(vertices)
 
     # Build induced adjacency (only edges within the vertex set)
     induced_adj: dict[int, set[int]] = {}
@@ -58,41 +57,38 @@ def dsatur_coloring(
     # Compute initial degrees in induced subgraph (for tie-breaking)
     degree = {v: len(induced_adj[v]) for v in vertices}
 
+    # Initialize max-heap (-saturation, -degree, vertex) for selection
+    # Because heapq is a min-heap, we use negative values to simulate max-heap behavior
+    heap = [(-0, -degree[v], v) for v in vertices]
+    heapq.heapify(heap)
+
     # Color all vertices
-    for _ in range(n):
-        # Select vertex with max saturation, break ties by max degree
-        best_vertex: Optional[int] = None
-        best_saturation = -1
-        best_degree = -1
-
-        for v in vertices:
-            if v in color:
-                continue  # already colored
-
-            sat = len(neighbor_colors[v])
-            deg = degree[v]
-
-            if sat > best_saturation or (sat == best_saturation and deg > best_degree):
+    while heap:
+        # Select vertex with max saturation (and max degree tie-break)
+        while heap:
+            _, _, v = heapq.heappop(heap)
+            if v not in color:
                 best_vertex = v
-                best_saturation = sat
-                best_degree = deg
-
-        if best_vertex is None:
+                break  # found an uncolored vertex
+        else:
             break  # all colored
 
         # Find smallest available color for best_vertex
         used_colors = neighbor_colors[best_vertex]
         c = 0
+
         while c in used_colors:
             c += 1
 
         # Assign color
         color[best_vertex] = c
 
-        # Update saturation of uncolored neighbors
+        # Update saturation of uncolored neighbors and push to heap
         for neighbor in induced_adj[best_vertex]:
             if neighbor not in color:
                 neighbor_colors[neighbor].add(c)
+                new_saturation = len(neighbor_colors[neighbor])
+                heapq.heappush(heap, (-new_saturation, -degree[neighbor], neighbor))
 
     return color
 
