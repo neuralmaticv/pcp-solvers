@@ -8,7 +8,7 @@ import csv
 import json
 import multiprocessing
 import sys
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, Union
@@ -66,6 +66,7 @@ class ExperimentRunner:
         self.output_dir = Path(output_dir) if output_dir else Path.cwd()
         self.results: list[Result] = []
         self.num_workers = num_workers if num_workers is not None else multiprocessing.cpu_count()
+        self._csv_filepath: Path | None = None
         if isinstance(solver, ACOSolver):
             self._solver_type = "ACO"
         elif isinstance(solver, TabuSearchSolver):
@@ -73,11 +74,86 @@ class ExperimentRunner:
         else:
             self._solver_type = "ILP"
 
+    def init_output(self, filename: str | None = None, solver_name: str | None = None) -> Path:
+        """
+        Initialize output files: write CSV header and params JSON.
+
+        Call this before running experiments so results are appended incrementally.
+
+        Args:
+            filename: Output CSV filename (default: auto-generated)
+            solver_name: Name of the solver (included in default filename)
+
+        Returns:
+            Path to the CSV file
+        """
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            solver_part = f"{solver_name or self._solver_type}_"
+            filename = f"results_{solver_part}{timestamp}.csv"
+
+        self._csv_filepath = self.output_dir / filename
+        self._csv_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write CSV header
+        with open(self._csv_filepath, "w", newline="") as f:
+            writer = csv.writer(f)
+            if self._solver_type in ["ACO", "TabuSearch"]:
+                writer.writerow(
+                    ["instance", "vertices", "edges", "partitions", "runs", "best", "avg", "std", "total_time_s"]
+                )
+            else:
+                writer.writerow(
+                    ["instance", "vertices", "edges", "partitions", "status", "colors", "runtime_s", "gap"]
+                )
+
+        # Write params JSON
+        self.save_params_json(self._csv_filepath)
+
+        print(f"Output initialized: {self._csv_filepath}")
+        return self._csv_filepath
+
+    def _append_result_csv(self, result: Result) -> None:
+        """Append a single result row to the CSV file."""
+        if self._csv_filepath is None:
+            return
+
+        with open(self._csv_filepath, "a", newline="") as f:
+            writer = csv.writer(f)
+            if isinstance(result, (ACOResult, TabuSearchResult)):
+                writer.writerow(
+                    [
+                        result.instance_name,
+                        result.num_vertices,
+                        result.num_edges,
+                        result.num_partitions,
+                        result.num_runs,
+                        result.best_colors,
+                        f"{result.avg_colors:.2f}",
+                        f"{result.std_colors:.2f}",
+                        f"{result.total_runtime_seconds:.3f}",
+                    ]
+                )
+            else:
+                writer.writerow(
+                    [
+                        result.instance_name,
+                        result.num_vertices,
+                        result.num_edges,
+                        result.num_partitions,
+                        result.status.value,
+                        result.num_colors if result.num_colors is not None else "",
+                        f"{result.runtime_seconds:.3f}",
+                        f"{result.gap:.4f}" if result.gap is not None else "",
+                    ]
+                )
+
     def run_instance(self, filepath: Path) -> Result:
         """Run solver on a single instance."""
         instance = PCPInstance.from_file(filepath)
         result = self.solver.solve(instance)
         self.results.append(result)
+        self._append_result_csv(result)
         return result
 
     def run_directory(
@@ -148,7 +224,6 @@ class ExperimentRunner:
             }
 
             # Process results as they complete
-            from concurrent.futures import as_completed
             for future in as_completed(future_to_file):
                 filepath = future_to_file[future]
                 completed += 1
@@ -158,6 +233,7 @@ class ExperimentRunner:
                     print(f"[{completed}/{len(files)}] {filepath.name}...", end=" ")
                     self._print_result_line(result)
                     self.results.append(result)
+                    self._append_result_csv(result)
                     results.append(result)
                 except Exception as e:
                     print(f"[{completed}/{len(files)}] {filepath.name}... ERROR: {e}")

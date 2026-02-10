@@ -215,13 +215,16 @@ def main():
 
     # Run experiments
     if args.instance:
-        # Single instance mode
+        # Single instance mode — init output and run
+        runner.init_output(args.output_file)
+
         print(f"Running on instance: {args.instance}")
         instance = PCPInstance.from_file(args.instance)
         print(f"  {instance}")
 
         result = solver.solve(instance)
         runner.results.append(result)
+        runner._append_result_csv(result)
 
         # Print result based on solver type
         if isinstance(result, SolverResult) and isinstance(solver, ILPSolver):
@@ -259,7 +262,8 @@ def main():
             print(f"  Total runtime: {result.total_runtime_seconds:.3f}s")
 
     elif args.family:
-        # Single family mode
+        # Single family mode — init output, then run (results appended incrementally)
+        runner.init_output(args.output_file)
         runner.run_directory(
             args.instances_dir / args.family,
             max_instances=args.max_instances,
@@ -269,7 +273,8 @@ def main():
         runner.print_summary()
 
     else:
-        # All families mode
+        # All families mode — init output, then run (results appended incrementally)
+        runner.init_output(args.output_file)
         families = ["ring", "nsfnet", "random", "big-random"]
         runner.run_all_families(
             args.instances_dir,
@@ -279,11 +284,6 @@ def main():
         )
         runner.print_table()
         runner.print_summary()
-
-    # Save results
-    if runner.results:
-        csv_path = runner.save_results_csv(args.output_file)
-        runner.save_params_json(csv_path)
 
 
 if __name__ == "__main__":

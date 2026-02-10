@@ -348,6 +348,17 @@ class TabuSearchSolver:
         C = target_colors
         max_iter = q * C * self.max_iter_factor
 
+        # Maintain a cached set of selected vertices for O(1) lookups
+        selected_set = set(S_prime_selection.values())
+
+        # Compute initial conflict count once
+        current_conflicts = self._count_conflicts_fast(
+            S_prime_selection, S_prime_coloring, induced_adj, instance
+        )
+
+        if current_conflicts == 0:
+            return S_prime_selection, S_prime_coloring
+
         # Let Q be the set of components with conflicts in S'
         Q = self._get_conflict_components(S_prime_selection, S_prime_coloring, induced_adj, instance)
 
@@ -361,91 +372,118 @@ class TabuSearchSolver:
             reduction = False
 
             # Set maxConflicts ← ∞
-            max_conflicts = float("inf")
-            best_neighbor_selection = None
-            best_neighbor_coloring = None
+            best_tentative_conflicts = float("inf")
             best_i_bar = None
             best_ell_bar = None
-            best_k_bar = None
 
             partition_k = instance.partitions[k]
+            current_vertex_k = S_prime_selection[k]
+            current_color_k = S_prime_coloring.get(current_vertex_k)
+
+            # Precompute: conflicts contributed by the current vertex in partition k
+            old_vertex_conflicts = self._count_vertex_conflicts(
+                current_vertex_k, current_color_k, selected_set, S_prime_coloring, induced_adj
+            ) if current_color_k is not None else 0
 
             # For each i ∈ Vk and for each color ℓ while .NOT.reduction
             for i in partition_k:
+                if reduction:
+                    break
                 for ell in range(target_colors):
                     if reduction:
                         break
 
-                    # Check if pair (i,ℓ) is tabu or satisfies aspiration criterion
+                    # Check if pair (i,ℓ) is tabu
                     is_tabu = (i, ell) in tabu_list and tabu_list[(i, ell)] > iteration
-                    current_conflicts = self._count_conflicts_fast(
-                        S_prime_selection, S_prime_coloring, induced_adj, instance
-                    )
 
-                    # Obtain tentative solution S″ by recoloring node i with color ℓ
-                    S_double_prime_selection = S_prime_selection.copy()
-                    S_double_prime_coloring = S_prime_coloring.copy()
+                    # Compute tentative conflicts incrementally:
+                    # Remove old vertex's conflicts, add new vertex's conflicts
+                    if i == current_vertex_k:
+                        # Same vertex, just recolor
+                        new_vertex_conflicts = self._count_vertex_conflicts(
+                            i, ell, selected_set, S_prime_coloring, induced_adj
+                        )
+                    else:
+                        # Different vertex: temporarily update selected_set
+                        selected_set.discard(current_vertex_k)
+                        selected_set.add(i)
+                        # Temporarily update coloring for the new vertex
+                        S_prime_coloring[i] = ell
+                        old_entry = S_prime_coloring.pop(current_vertex_k, None)
 
-                    current_vertex_k = S_prime_selection[k]
-                    if i != current_vertex_k:
-                        S_double_prime_selection[k] = i
-                        if current_vertex_k in S_double_prime_coloring:
-                            del S_double_prime_coloring[current_vertex_k]
+                        new_vertex_conflicts = self._count_vertex_conflicts(
+                            i, ell, selected_set, S_prime_coloring, induced_adj
+                        )
 
-                    S_double_prime_coloring[i] = ell
+                        # Restore state
+                        if old_entry is not None:
+                            S_prime_coloring[current_vertex_k] = old_entry
+                        del S_prime_coloring[i]
+                        selected_set.discard(i)
+                        selected_set.add(current_vertex_k)
 
-                    tentative_conflicts = self._count_conflicts_fast(
-                        S_double_prime_selection, S_double_prime_coloring, induced_adj, instance
-                    )
+                    tentative_conflicts = current_conflicts - old_vertex_conflicts + new_vertex_conflicts
 
                     # Aspiration criterion
                     aspiration = tentative_conflicts < current_conflicts
 
                     if not is_tabu or aspiration:
                         # Track best neighbor
-                        if tentative_conflicts < max_conflicts:
-                            max_conflicts = tentative_conflicts
-                            best_neighbor_selection = S_double_prime_selection.copy()
-                            best_neighbor_coloring = S_double_prime_coloring.copy()
+                        if tentative_conflicts < best_tentative_conflicts:
+                            best_tentative_conflicts = tentative_conflicts
                             best_i_bar = i
                             best_ell_bar = ell
-                            best_k_bar = k
 
-                        # If improvement over current S', update and set reduction
+                        # If improvement over current S', apply and set reduction
                         if tentative_conflicts < current_conflicts:
-                            S_prime_selection = S_double_prime_selection
-                            S_prime_coloring = S_double_prime_coloring
+                            # Apply the move
+                            if i != current_vertex_k:
+                                selected_set.discard(current_vertex_k)
+                                selected_set.add(i)
+                                S_prime_selection[k] = i
+                                if current_vertex_k in S_prime_coloring:
+                                    del S_prime_coloring[current_vertex_k]
+                            S_prime_coloring[i] = ell
+                            current_conflicts = tentative_conflicts
+
                             reduction = True
                             iteration += 1
+                            if current_conflicts == 0:
+                                return S_prime_selection, S_prime_coloring
                             Q = self._get_conflict_components(
                                 S_prime_selection, S_prime_coloring, induced_adj, instance
                             )
 
-                if reduction:
-                    break
-
-            # Check if conflicts(S') = 0
-            if self._count_conflicts_fast(S_prime_selection, S_prime_coloring, induced_adj, instance) == 0:
+            if current_conflicts == 0:
                 return S_prime_selection, S_prime_coloring
 
             # Move to best neighbor if no improvement found
-            if not reduction and best_neighbor_selection is not None:
+            if not reduction and best_i_bar is not None and best_ell_bar is not None:
                 # Insert pair in tabu list for TabuTenure iterations
                 tenure = self._compute_tabu_tenure(C, rng)
                 tabu_list[(best_i_bar, best_ell_bar)] = iteration + tenure
 
-                # S' ← S_bar
-                S_prime_selection = best_neighbor_selection
-                S_prime_coloring = best_neighbor_coloring
+                # Apply the best move
+                if best_i_bar != current_vertex_k:
+                    selected_set.discard(current_vertex_k)
+                    selected_set.add(best_i_bar)
+                    S_prime_selection[k] = best_i_bar
+                    if current_vertex_k in S_prime_coloring:
+                        del S_prime_coloring[current_vertex_k]
+                S_prime_coloring[best_i_bar] = best_ell_bar
+                current_conflicts = best_tentative_conflicts
 
-                # iter ← iter + 1
                 iteration += 1
 
-                if iteration < max_iter:
-                    Q = self._get_conflict_components(S_prime_selection, S_prime_coloring, induced_adj, instance)
+                if current_conflicts == 0:
+                    return S_prime_selection, S_prime_coloring
 
-        # Check final solution
-        if self._count_conflicts_fast(S_prime_selection, S_prime_coloring, induced_adj, instance) == 0:
+                if iteration < max_iter:
+                    Q = self._get_conflict_components(
+                        S_prime_selection, S_prime_coloring, induced_adj, instance
+                    )
+
+        if current_conflicts == 0:
             return S_prime_selection, S_prime_coloring
 
         return None
@@ -469,6 +507,21 @@ class TabuSearchSolver:
                 if v_partition != neighbor_partition:
                     induced_adj[v].add(neighbor)
         return induced_adj
+
+    def _count_vertex_conflicts(
+        self,
+        vertex: int,
+        color: int,
+        selected_vertices: set[int],
+        coloring: dict[int, int],
+        adjacency: dict[int, set[int]],
+    ) -> int:
+        """Count conflicts for a single vertex against selected neighbors."""
+        conflicts = 0
+        for neighbor in adjacency.get(vertex, set()):
+            if neighbor in selected_vertices and coloring.get(neighbor) == color:
+                conflicts += 1
+        return conflicts
 
     def _count_conflicts_fast(
         self,
