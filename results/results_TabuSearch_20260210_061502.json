@@ -1,0 +1,12 @@
+{
+  "solver": "TabuSearch",
+  "tabu_tenure_range": [
+    0.0,
+    0.5
+  ],
+  "max_iter_factor": 10,
+  "num_runs": 10,
+  "base_seed": null,
+  "timestamp": "2026-02-10T06:15:02.933291",
+  "num_instances": 0
+}

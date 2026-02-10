@@ -1,0 +1,7 @@
+{
+  "solver": "ILP",
+  "backend": "SCIP",
+  "time_limit_seconds": 300.0,
+  "timestamp": "2026-02-09T21:21:03.068006",
+  "num_instances": 0
+}
