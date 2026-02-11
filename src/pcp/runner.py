@@ -7,6 +7,7 @@ Supports ILP, ACO, and TabuSearch solvers with unified interface.
 import csv
 import json
 import multiprocessing
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
@@ -178,7 +179,10 @@ class ExperimentRunner:
             List of results
         """
         directory = Path(directory)
-        files = sorted(directory.glob(pattern))
+        files = sorted(
+            directory.glob(pattern),
+            key=lambda p: [int(s) if s.isdigit() else s.lower() for s in re.split(r"(\d+)", p.name)],
+        )
 
         if max_instances:
             if from_end:
